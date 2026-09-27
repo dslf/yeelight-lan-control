@@ -1,133 +1,131 @@
-# Yeelight W3 White — управление по локальной сети (LAN)
+# Yeelight W3 White — LAN Control
 
-PowerShell-скрипт для управления белыми лампочками **Yeelight W3 White** по LAN-протоколу Yeelight (без облака).
+A PowerShell tool to control **Yeelight W3 White** smart bulbs over the local network using the Yeelight LAN protocol (no cloud).
 
-## Возможности
+> Disclaimer: written with OpenCode in Zen mode. Just for fun.
 
-- Поиск лампочек в сети: SSDP (multicast `239.255.255.250:1982`) + TCP-скан порта `55443`.
-- **Стабильные алиасы**: лампочка привязана по MAC-адресу, поэтому при смене IP (DHCP) алиас сохраняется.
-- Включение/выключение/переключение и установка яркости отдельной лампе или целой группе.
-- **Группы**: объединение лампочек и управление группой одной командой.
-- Состояние и настройки хранятся в `config.json` рядом со скриптом.
+## Features
 
-## Требования
+- Discovers bulbs on the network: SSDP (multicast `239.255.255.250:1982`) plus a TCP scan of port `55443`.
+- **Stable aliases**: each bulb is bound to its MAC address, so the alias survives IP changes (e.g. DHCP renewals).
+- Power on/off/toggle and brightness control for a single bulb or an entire group.
+- **Groups**: group bulbs together and command them all at once.
+- State and settings are persisted in `config.json` next to the script.
+- Commands are sent to group members **in parallel**, so a group acts almost instantly.
 
-- **PowerShell 7+** (`pwsh`). Проверка: `pwsh -v`.
-- Windows-машина в одной подсети с лампочками (LAN-протокол не работает через другой VLAN/интернет).
-- В приложении Mi Home / Yeelight у лампочки должен быть включён режим **«Управление по локальной сети»** (LAN Control).
-- Firewall: разрешить UDP multicast и исходящие TCP-подключения на порт `55443`.
+## Requirements
 
-## Быстрый старт
+- **PowerShell 7+** (`pwsh`). Check: `pwsh -v`.
+- A Windows machine on the same subnet as the bulbs (the LAN protocol does not cross VLANs or the internet).
+- **"LAN Control"** (Управление по локальной сети) must be enabled for each bulb in the Mi Home / Yeelight app.
+- Firewall: allow UDP multicast and outbound TCP connections to port `55443`.
+
+## Quick start
 
 ```powershell
 pwsh -ExecutionPolicy Bypass -File .\yeelight.ps1 scan
 ```
 
-Или запускайте из папки:
+Or from the project folder:
 
 ```powershell
 .\yeelight.ps1 scan
 ```
 
-## Команды
+## Commands
 
-### Поиск и список
+### Discovery and listing
 
-| Команда | Описание |
+| Command | Description |
 |---|---|
-| `scan` | Сканирует сеть, находит лампочки, обновляет их IP в `config.json`. Некогда неизвестные лампы получают авто-алиас `bulb1`, `bulb2`, … |
-| `list` | Показывает сохранённые лампочки и группы из `config.json`. |
+| `scan` | Scans the network, finds bulbs, updates their IPs in `config.json`. New bulbs get auto-aliases `bulb1`, `bulb2`, … |
+| `list` | Shows saved bulbs and groups from `config.json`. |
 
-Параметры `scan`:
+`scan` parameters:
 
-| Параметр | Описание |
+| Parameter | Description |
 |---|---|
-| `-Network 192.168.88` | Префикс подсети (по умолчанию берётся из локального IP). |
-| `-Sweep` | Принудительно сделать полный TCP-скан всех 254 адресов. |
-| `-TimeoutMs 3000` | Время ожидания SSDP-ответов, мс. |
+| `-Network 192.168.88` | Subnet prefix (defaults to the local IP's subnet). |
+| `-Sweep` | Force a full TCP scan of all 254 addresses. |
+| `-TimeoutMs 3000` | SSDP response wait time, ms. |
 
-### Алиасы
+### Aliases
 
 ```powershell
-.\yeelight.ps1 alias -Target 192.168.88.20 -Alias кухня
-.\yeelight.ps1 alias -Target кухня -Alias гостиная   # переименование
+.\yeelight.ps1 alias -Target 192.168.88.20 -Alias kitchen
+.\yeelight.ps1 alias -Target kitchen -Alias living_room   # rename
 ```
 
-При переименовании ссылки в группах обновляются автоматически.
+Renaming a bulb automatically updates all group references.
 
-### Управление
+### Control
 
-Цель (`-Target`) указывается одним из способов:
-
-- алиас лампочки — `-Target кухня`;
-- IP — `-Target 192.168.88.20`;
-- имя группы — `-Target весь_дом`;
-- не указывать вовсе — команда применится ко **всем** лампочкам.
+The target (`-Target`) may be a bulb alias, an IP address, or a group name. If omitted, the command applies to **all** bulbs.
 
 ```powershell
-.\yeelight.ps1 on                              # включить все
-.\yeelight.ps1 off -Target кухня               # выключить одну
-.\yeelight.ps1 toggle -Target весь_дом         # переключить группу
-.\yeelight.ps1 bright -Brightness 40 -Target гостиная   # яркость 1-100
-.\yeelight.ps1 status                          # состояние всех
-.\yeelight.ps1 status -Target весь_дом
+.\yeelight.ps1 on                              # turn on everything
+.\yeelight.ps1 off -Target kitchen             # turn off one bulb
+.\yeelight.ps1 toggle -Target whole_floor      # toggle a group
+.\yeelight.ps1 bright -Brightness 40 -Target living_room   # brightness 1–100
+.\yeelight.ps1 status                          # status of all bulbs
+.\yeelight.ps1 status -Target whole_floor
 ```
 
-Параметры:
+Parameters:
 
-| Параметр | Описание |
+| Parameter | Description |
 |---|---|
-| `-Target` | Алиас, IP или имя группы. Пусто = все лампочки. |
-| `-Brightness` | Яркость 1–100 для команды `bright`. |
-| `-Rescan` | Пересканировать сеть перед выполнением команды (обновить IP). |
+| `-Target` | Bulb alias, IP, or group name. Empty = all bulbs. |
+| `-Brightness` | Brightness 1–100 for the `bright` command. |
+| `-Rescan` | Re-scan the network before running the command (refresh IPs). |
 
-### Группы
+### Groups
 
 ```powershell
-# создать группу
-.\yeelight.ps1 group -GroupAction add -Group весь_дом -Members кухня,зал,спальня
+# create a group
+.\yeelight.ps1 group -GroupAction add -Group whole_floor -Members kitchen,living,bedroom
 
-# добавить/убрать лампочку
-.\yeelight.ps1 group -GroupAction member-add -Group весь_дом -Members ванная
-.\yeelight.ps1 group -GroupAction member-remove -Group весь_дом -Members ванная
+# add / remove a bulb
+.\yeelight.ps1 group -GroupAction member-add -Group whole_floor -Members bathroom
+.\yeelight.ps1 group -GroupAction member-remove -Group whole_floor -Members bathroom
 
-# удалить группу
-.\yeelight.ps1 group -GroupAction remove -Group весь_дом
+# delete a group
+.\yeelight.ps1 group -GroupAction remove -Group whole_floor
 
-# показать группы и текущее состояние их лампочек
+# show groups and the current state of their bulbs
 .\yeelight.ps1 group -GroupAction show
 ```
 
-Управление группой — обычными командами с `-Target <группа>`:
+Control a group with the regular commands and `-Target <group>`:
 
 ```powershell
-.\yeelight.ps1 on -Target весь_дом
-.\yeelight.ps1 off -Target весь_дом
+.\yeelight.ps1 on -Target whole_floor
+.\yeelight.ps1 off -Target whole_floor
 ```
 
-В `-Members` можно указывать как алиасы, так и IP — в конфиг запишутся алиасы.
+`-Members` accepts aliases or IPs — aliases are what gets stored in the config.
 
-## Файл конфигурации `config.json`
+## Configuration file `config.json`
 
-Создаётся автоматически при первом `scan`. Можно править вручную:
+Created automatically on the first `scan`. Can be edited manually:
 
 ```json
 {
   "bulbs": [
-    { "Mac": "b4-60-ed-1c-81-6e", "Alias": "кухня", "Ip": "192.168.88.20", "Port": 55443 },
-    { "Mac": "b4-60-ed-61-dd-be", "Alias": "зал",    "Ip": "192.168.88.25", "Port": 55443 }
+    { "Mac": "b4-60-ed-1c-81-6e", "Alias": "kitchen",     "Ip": "192.168.88.20", "Port": 55443 },
+    { "Mac": "b4-60-ed-61-dd-be", "Alias": "living_room", "Ip": "192.168.88.25", "Port": 55443 }
   ],
   "groups": {
-    "весь_дом": ["кухня", "зал"]
+    "whole_floor": ["kitchen", "living_room"]
   }
 }
 ```
 
-- `Mac` — стабильный идентификатор лампочки (соответствие «алиас → лампочка» не зависит от IP).
-- IP лампочек можно обновить командой `scan` — алиасы и группы при этом сохраняются.
+- `Mac` — the stable bulb identifier; the alias→bulb mapping is independent of the IP address.
+- Refresh IPs anytime with `scan` — aliases and groups are preserved.
 
-## Примечания
+## Notes
 
-- Некоторые ролики лампочек могут не отвечать на SSDP — в этом случае используется TCP-скан порта `55443`.
-- Скрипт сохраняет конфиг в UTF-8 с BOM — кириллические алиасы корректно открываются в Notepad.
-- Есть только управление мощностью и яркостью: модель W3 White не имеет цвета и цветовой температуры.
+- Some bulb firmware versions do not answer SSDP — in that case the TCP scan of port `55443` is used as a fallback.
+- The config is saved as UTF-8 with BOM so non-ASCII aliases display correctly in Windows editors.
+- Only power and brightness are supported: the W3 White model has neither color nor color-temperature control.
