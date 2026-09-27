@@ -8,10 +8,10 @@ A PowerShell tool to control **Yeelight W3 White** smart bulbs over the local ne
 
 - Discovers bulbs on the network: SSDP (multicast `239.255.255.250:1982`) plus a TCP scan of port `55443`.
 - **Stable aliases**: each bulb is bound to its MAC address, so the alias survives IP changes (e.g. DHCP renewals).
-- Power on/off/toggle and brightness control for a single bulb or an entire group.
+- On/off/toggle and brightness control for a single bulb or an entire group.
 - **Groups**: group bulbs together and command them all at once.
 - State and settings are persisted in `config.json` next to the script.
-- Commands are sent to group members **in parallel**, so a group acts almost instantly.
+- Commands are sent to group members **in parallel**, so a group responds almost instantly.
 
 ## Requirements
 
@@ -103,7 +103,7 @@ Control a group with the regular commands and `-Target <group>`:
 .\yeelight.ps1 off -Target whole_floor
 ```
 
-`-Members` accepts aliases or IPs — aliases are what gets stored in the config.
+`-Members` accepts aliases or IPs — IPs are resolved to their aliases before saving, so only aliases are stored in the config.
 
 ## Configuration file `config.json`
 
@@ -127,5 +127,6 @@ Created automatically on the first `scan`. Can be edited manually:
 ## Notes
 
 - Some bulb firmware versions do not answer SSDP — in that case the TCP scan of port `55443` is used as a fallback.
+- Alias binding relies on the bulb MAC (from SSDP `id` or the ARP table). If the MAC cannot be resolved, the bulb is matched by IP only.
 - The config is saved as UTF-8 with BOM so non-ASCII aliases display correctly in Windows editors.
 - Only power and brightness are supported: the W3 White model has neither color nor color-temperature control.

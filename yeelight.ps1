@@ -1,42 +1,42 @@
 <#
 .SYNOPSIS
-  Управление белыми лампочками Yeelight W3 White по LAN-протоколу.
+  LAN control of Yeelight W3 White bulbs.
 .DESCRIPTION
-  - scan: поиск лампочек (SSDP multicast + TCP-скан порта 55443).
-  - У каждой лампочки стабильный алиас: привязка идёт по MAC (id), поэтому при
-    смене IP лампочка остаётся той же и управляется тем же алиасом.
-  - Лампочки объединяются в группы; команда группе применяется ко всем её членам.
-  Настройки и состояния хранятся в config.json рядом со скриптом.
+  - scan: bulb discovery (SSDP multicast + TCP scan of port 55443).
+  - Each bulb has a stable alias bound to its MAC (id), so the bulb stays the
+    same and keeps its alias even if its IP changes.
+  - Bulbs can be grouped; a command sent to a group applies to all its members.
+  Settings and state are stored in config.json next to the script.
 .PARAMETER Command
   scan | list | alias | status | on | off | toggle | bright | group
 .PARAMETER Target
-  Алиас, IP или имя группы, к которой применить команду. Пусто = все лампочки.
+  Alias, IP or group name to apply the command to. Empty = all bulbs.
 .PARAMETER Alias
-  Новый алиас для команды 'alias'.
+  New alias for the 'alias' command.
 .PARAMETER Brightness
-  Яркость 1-100 для команды 'bright'.
+  Brightness 1-100 for the 'bright' command.
 .PARAMETER Group
-  Имя группы для команд 'group'.
+  Group name for the 'group' commands.
 .PARAMETER GroupAction
   add | remove | show | member-add | member-remove
 .PARAMETER Members
-  Список алиасов или IP для добавления в группу.
+  Aliases or IPs to add to a group.
 .PARAMETER Network
-  Префикс подсети, например 192.168.88 (без последнего октета).
+  Subnet prefix, e.g. 192.168.88 (without the last octet).
 .PARAMETER TimeoutMs
-  Время ожидания SSDP-ответов, мс. По умолчанию 3000.
+  SSDP response wait time, ms. Default 3000.
 .PARAMETER Sweep
-  Принудительно выполнить полный TCP-скан подсети на порту 55443.
+  Force a full TCP scan of the subnet on port 55443.
 .PARAMETER Rescan
-  Заново сканировать сеть перед командой (обновить текущие IP).
+  Re-scan the network before the command (refresh current IPs).
 .EXAMPLE
   .\yeelight.ps1 scan
-  .\yeelight.ps1 alias -Target 192.168.88.20 -Alias кухня
+  .\yeelight.ps1 alias -Target 192.168.88.20 -Alias kitchen
   .\yeelight.ps1 on
-  .\yeelight.ps1 off -Target кухня
-  .\yeelight.ps1 bright -Brightness 40 -Target спальня
-  .\yeelight.ps1 group -GroupAction add -Group зал -Members кухня,спальня
-  .\yeelight.ps1 on -Target зал
+  .\yeelight.ps1 off -Target kitchen
+  .\yeelight.ps1 bright -Brightness 40 -Target bedroom
+  .\yeelight.ps1 group -GroupAction add -Group living -Members kitchen,bedroom
+  .\yeelight.ps1 on -Target living
   .\yeelight.ps1 status
 #>
 [CmdletBinding()]
@@ -102,7 +102,7 @@ function Get-Config {
       if ($o.groups) {
         foreach ($g in $o.groups.PSObject.Properties) { $cfg.groups[$g.Name] = @($g.Value) }
       }
-    } catch { Write-Warning "config.json повреждён, перезаписываю: $_" }
+    } catch { Write-Warning "config.json is corrupted, rewriting: $_" }
   }
   $cfg
 }
@@ -406,23 +406,23 @@ function Resolve-MembersToAliases {
   foreach ($m in @($Members)) {
     $b = @($Bulbs | Where-Object { $_.Alias -eq $m -or $_.Ip -eq $m } | Select-Object -First 1)
     if ($b) { $out += $b[0].Alias }
-    else { Write-Warning "Пропускаю '$m': нет лампочки с таким алиасом или IP." }
+    else { Write-Warning "Skipping '$m': no bulb with that alias or IP." }
   }
   $out
 }
 
 function Write-NoBulbsHint {
-  Write-Host 'Лампочки не найдены.' -ForegroundColor Yellow
-  Write-Host '  1. Проверьте, что лампа в той же сети (подсеть и префикс).'
-  Write-Host '  2. В приложении Mi Home / Yeelight включите "Управление по локальной сети" (LAN Control).'
-  Write-Host '  3. Firewall: разрешите UDP multicast 239.255.255.250:1982 и TCP 55443.'
+  Write-Host 'No bulbs found.' -ForegroundColor Yellow
+  Write-Host '  1. Make sure the bulbs are on the same network (subnet prefix).'
+  Write-Host '  2. Enable "LAN Control" for each bulb in the Mi Home / Yeelight app.'
+  Write-Host '  3. Firewall: allow UDP multicast 239.255.255.250:1982 and TCP 55443.'
 }
 
 $prefix = Get-LocalPrefix
 $cfg = Get-Config
 
 if ($Command -eq 'scan') {
-  Write-Host "Сканирование сети (префикс: $prefix) ..."
+  Write-Host "Scanning network (prefix: $prefix) ..."
   $disc = Discover-Yeelights -Prefix $prefix -ForceSweep $Sweep -TimeoutMs $TimeoutMs
   if ($disc.Count -eq 0) {
     Write-NoBulbsHint
@@ -443,11 +443,11 @@ if ($Command -eq 'scan') {
     }
   }
   $cfg.bulbs | Select-Object Alias, Ip, Mac, Power, Bright, Model, Source | Format-Table -AutoSize
-  Write-Host "Лампочек: $($cfg.bulbs.Count) (всего), найдено сейчас: $($disc.Count)."
+  Write-Host "Bulbs: $($cfg.bulbs.Count) total, $($disc.Count) found now."
   if ($newOnes.Count) {
-    Write-Host 'Новые лампочки получили авто-алиасы. Присвойте имена:' -ForegroundColor Cyan
+    Write-Host 'New bulbs got auto-aliases. Assign names:' -ForegroundColor Cyan
     foreach ($n in $newOnes) {
-      Write-Host "  $($n.Ip) -> алиас '$($n.Alias)'   (\yeelight.ps1 alias -Target $($n.Alias) -Alias имя)"
+      Write-Host "  $($n.Ip) -> alias '$($n.Alias)'   (\yeelight.ps1 alias -Target $($n.Alias) -Alias name)"
     }
   }
   exit
@@ -455,81 +455,81 @@ if ($Command -eq 'scan') {
 
 if ($Command -eq 'list') {
   if ($cfg.bulbs.Count) {
-    Write-Host 'Лампочки:'
+    Write-Host 'Bulbs:'
     $cfg.bulbs | Select-Object Alias, Ip, Mac, Power, Bright, Name, Model | Format-Table -AutoSize
   } else {
-    Write-Host 'В конфигурации нет лампочек. Выполните: .\yeelight.ps1 scan'
+    Write-Host 'No bulbs in config. Run: .\yeelight.ps1 scan'
   }
   if ($cfg.groups.Count) {
-    Write-Host 'Группы:'
+    Write-Host 'Groups:'
     foreach ($g in $cfg.groups.GetEnumerator()) {
       Write-Host "  $($g.Key): $($g.Value -join ', ')"
     }
   } else {
-    Write-Host 'Группы: (нет)'
+    Write-Host 'Groups: (none)'
   }
   exit
 }
 
 if ($Command -eq 'alias') {
   if (-not $Target -or -not $Alias) {
-    throw "Использование: .\yeelight.ps1 alias -Target <IP|алиас> -Alias <новый алиас>"
+    throw "Usage: .\yeelight.ps1 alias -Target <IP|alias> -Alias <new alias>"
   }
-  if ($Alias -notmatch '^[\p{L}\p{N}_.\- ]+$') { throw "Недопустимый алиас: '$Alias'" }
+  if ($Alias -notmatch '^[\p{L}\p{N}_.\- ]+$') { throw "Invalid alias: '$Alias'" }
   $found = @($cfg.bulbs | Where-Object { $_.Alias -eq $Target -or $_.Ip -eq $Target -or $_.Mac -ieq $Target } | Select-Object -First 1)
-  if (-not $found) { throw "Не найдена лампочка: $Target. Сначала выполните scan." }
+  if (-not $found) { throw "Bulb not found: $Target. Run scan first." }
   $old = $found[0].Alias
-  if ($old -eq $Alias) { Write-Host "'$Alias' уже установлен."; exit }
-  if (-not (Free-Alias -Existing $cfg.bulbs -Alias $Alias)) { throw "Алиас '$Alias' уже используется другой лампочкой." }
+  if ($old -eq $Alias) { Write-Host "'$Alias' already set."; exit }
+  if (-not (Free-Alias -Existing $cfg.bulbs -Alias $Alias)) { throw "Alias '$Alias' is already used by another bulb." }
   $found[0].Alias = $Alias
   foreach ($k in @($cfg.groups.Keys)) {
     $cfg.groups[$k] = @($cfg.groups[$k] | ForEach-Object { if ($_ -eq $old) { $Alias } else { $_ } })
   }
   Save-Config $cfg
-  Write-Host "Алиас: '$old' -> '$Alias' ($($found[0].Ip))"
+  Write-Host "Alias: '$old' -> '$Alias' ($($found[0].Ip))"
   exit
 }
 
 if ($Command -eq 'group') {
   switch ($GroupAction) {
     'add' {
-      if (-not $Group) { throw "Укажите имя группы: -Group зал" }
-      if ($cfg.groups.ContainsKey($Group)) { throw "Группа '$Group' уже существует. Используйте member-add." }
+      if (-not $Group) { throw "Specify a group name: -Group living" }
+      if ($cfg.groups.ContainsKey($Group)) { throw "Group '$Group' already exists. Use member-add." }
       $cfg.groups[$Group] = Resolve-MembersToAliases -Bulbs $cfg.bulbs -Members $Members
       Save-Config $cfg
-      Write-Host "Группа '$Group' создана: $($cfg.groups[$Group] -join ', ')"
+      Write-Host "Group '$Group' created: $($cfg.groups[$Group] -join ', ')"
     }
     'remove' {
-      if (-not $Group) { throw "Укажите имя группы: -Group зал" }
-      if (-not $cfg.groups.Remove($Group)) { throw "Группа '$Group' не найдена." }
+      if (-not $Group) { throw "Specify a group name: -Group living" }
+      if (-not $cfg.groups.Remove($Group)) { throw "Group '$Group' not found." }
       Save-Config $cfg
-      Write-Host "Группа '$Group' удалена."
+      Write-Host "Group '$Group' removed."
     }
     'member-add' {
-      if (-not $Group) { throw "Укажите имя группы и -Members." }
-      if (-not $cfg.groups.ContainsKey($Group)) { throw "Группа '$Group' не найдена. Создайте через group add." }
+      if (-not $Group) { throw "Specify a group name and -Members." }
+      if (-not $cfg.groups.ContainsKey($Group)) { throw "Group '$Group' not found. Create it with group add." }
       $add = Resolve-MembersToAliases -Bulbs $cfg.bulbs -Members $Members
       $cfg.groups[$Group] = @(($cfg.groups[$Group] + $add) | Select-Object -Unique)
       Save-Config $cfg
-      Write-Host "Группа '$Group': $($cfg.groups[$Group] -join ', ')"
+      Write-Host "Group '$Group': $($cfg.groups[$Group] -join ', ')"
     }
     'member-remove' {
-      if (-not $Group) { throw "Укажите имя группы и -Members." }
-      if (-not $cfg.groups.ContainsKey($Group)) { throw "Группа '$Group' не найдена." }
+      if (-not $Group) { throw "Specify a group name and -Members." }
+      if (-not $cfg.groups.ContainsKey($Group)) { throw "Group '$Group' not found." }
       foreach ($m in @($Members)) {
         $cfg.groups[$Group] = @($cfg.groups[$Group] | Where-Object { $_ -ne $m })
       }
       Save-Config $cfg
-      Write-Host "Группа '$Group': $($cfg.groups[$Group] -join ', ')"
+      Write-Host "Group '$Group': $($cfg.groups[$Group] -join ', ')"
     }
     'show' {
-      if (-not $cfg.groups.Count) { Write-Host 'Групп нет. Создайте: group -GroupAction add -Group зал -Members кухня,спальня'; exit }
+      if (-not $cfg.groups.Count) { Write-Host 'No groups. Create one: group -GroupAction add -Group living -Members kitchen,bedroom'; exit }
       foreach ($g in $cfg.groups.GetEnumerator()) {
         Write-Host "== $($g.Key) =="
         foreach ($a in @($g.Value)) {
           $b = @($cfg.bulbs | Where-Object { $_.Alias -eq $a } | Select-Object -First 1)
-          if ($b) { Write-Host "   $($b[0].Alias)  $($b[0].Ip)  $($b[0].Power)  ярк. $($b[0].Bright)" }
-          else { Write-Host "   $a  (не найдена)" }
+          if ($b) { Write-Host "   $($b[0].Alias)  $($b[0].Ip)  $($b[0].Power)  bright $($b[0].Bright)" }
+          else { Write-Host "   $a  (not found)" }
         }
       }
       exit
@@ -539,17 +539,17 @@ if ($Command -eq 'group') {
 }
 
 if ($Command -in @('bright') -and -not $Brightness) {
-  throw "Укажите яркость: .\yeelight.ps1 bright -Brightness 40"
+  throw "Specify brightness: .\yeelight.ps1 bright -Brightness 40"
 }
 if ($Command -eq 'bright' -and ($Brightness -lt 1 -or $Brightness -gt 100)) {
-  throw 'Яркость должна быть 1-100.'
+  throw 'Brightness must be 1-100.'
 }
 
 if ($cfg.bulbs.Count -eq 0 -or $Rescan) {
-  Write-Verbose 'Конфигурация пуста или запрошен рескан — обнаружение сети...'
+  Write-Verbose 'Config is empty or rescan requested - discovering the network...'
   $disc = Discover-Yeelights -Prefix $prefix -ForceSweep $Sweep -TimeoutMs $TimeoutMs
   if ($disc.Count -eq 0) {
-    Write-Error 'Лампочки не найдены. Выполните: .\yeelight.ps1 scan'
+    Write-Error 'No bulbs found. Run: .\yeelight.ps1 scan'
     exit 1
   }
   $cfg.bulbs = @(Merge-Discovered -Existing $cfg.bulbs -Discovered $disc)
@@ -558,9 +558,9 @@ if ($cfg.bulbs.Count -eq 0 -or $Rescan) {
 
 $targets = Resolve-Targets -Bulbs $cfg.bulbs -Groups $cfg.groups -Target $Target
 if ($targets.Count -eq 0) {
-  $hint = @('Доступные алиасы:') + @($cfg.bulbs.Alias) +
-    @('Группы:') + @($cfg.groups.Keys)
-  Write-Error "Не найдено лампочек по цели '$Target'. $($hint -join ', ')"
+  $hint = @('Available aliases:') + @($cfg.bulbs.Alias) +
+    @('Groups:') + @($cfg.groups.Keys)
+  Write-Error "No bulbs match target '$Target'. $($hint -join ', ')"
   exit 1
 }
 
@@ -593,7 +593,7 @@ $results = @($targets | ForEach-Object -Parallel {
   } elseif ($resp -and ($resp.PSObject.Properties.Name -contains 'error')) {
     [pscustomobject]@{
       Alias = $t.Alias; Ip = $t.Ip
-      Message = "ошибка $($resp.error.code): $($resp.error.message)"
+      Message = "error $($resp.error.code): $($resp.error.message)"
       Ok = $false
     }
   } elseif ($resp) {
@@ -605,7 +605,7 @@ $results = @($targets | ForEach-Object -Parallel {
   } else {
     [pscustomobject]@{
       Alias = $t.Alias; Ip = $t.Ip
-      Message = 'нет ответа'
+      Message = 'no response'
       Ok = $false
     }
   }
